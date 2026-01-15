@@ -3,6 +3,7 @@ BananaDB AI 分析引擎
 使用 Google Gemini 2.0 Flash Vision 逆向工程提示詞
 """
 import os
+import re
 import json
 from typing import Dict, Any
 import google.generativeai as genai
@@ -20,41 +21,102 @@ if not GEMINI_API_KEY:
 genai.configure(api_key=GEMINI_API_KEY)
 
 
-# System Prompt for Banana Pro 風格分析
-BANANA_PRO_SYSTEM_PROMPT = """You are an expert in the 'Banana Pro' Stable Diffusion model. Analyze the uploaded image.
+# System Prompt for Gemini Banana Pro Visual Logic Analysis
+BANANA_PRO_SYSTEM_PROMPT = """# Role
+You are a "Gemini Banana Pro" Visual Logic Specialist. Your goal is to reverse-engineer an image into a high-reasoning natural language prompt that leverages Gemini Banana Pro's specific capabilities (Text Rendering, Logical Layouts, Consistent Characters).
 
-CRITICAL REQUIREMENTS:
-1. Extract or reverse-engineer the Positive Prompt (English)
-2. MUST translate the prompt into Traditional Chinese (Taiwan usage) - this is MANDATORY
-3. Generate 5-8 tags in BOTH English AND Traditional Chinese (mixed together in one array)
-4. Classify into ONE category
-5. Suggest a Negative Prompt
+# Task
+Analyze the provided image and generate a "Structured Instruction" prompt in natural language paragraph format.
 
-Focus on lighting, camera angle, and art style.
+# Analysis Framework (Internal Thought Process)
 
-Available Categories:
-- Portrait (人像/肖像) - for people photos, portraits
-- Landscape (風景) - for nature, scenery, cityscapes
-- Animal (動物) - for pets, wildlife
-- Architecture (建築) - for buildings, interiors
-- Sci-Fi (科幻) - for futuristic, robots, space
-- Art (藝術/插畫) - for abstract art, illustrations
-- Food (食物) - for cuisine, dishes
-- Fashion (時尚) - for clothing, accessories
-- Other (其他) - for anything else
+1. **Text & Information**:
+   - Identify EXACT text visible in the image (Titles, Labels, Captions, Handwriting, Signs)
+   - *CRUCIAL*: Banana Pro excels at rendering Chinese/English text. You MUST transcribe exact text accurately
+   - Note font styles (bold, handwritten, 3D, floating text, etc.)
 
-Tags Example: ["3D", "三維", "isometric", "等距視角", "miniature", "微縮模型", "gym", "健身房", "Porsche", "保時捷"]
+2. **Logical Structure**:
+   - Determine the image type: Infographic, Mind Map, Flowchart, Storyboard, Comparison, Timeline, Photo Scene
+   - Describe the *relationship* between elements:
+     - "A flowchart showing cause and effect"
+     - "A split-screen before/after comparison"
+     - "A radial mind map with central node branching to 4 categories"
+     - "A sequential storyboard with 3 panels"
+   - Identify data flow, hierarchy, or narrative sequence
 
-Return STRICT JSON format (no markdown, no explanations):
+3. **Visual Style & Medium**:
+   - Banana Pro-specific keywords:
+     - "Hand-drawn sketch on paper"
+     - "3D layered typography with depth"
+     - "Cutout paper style with shadows"
+     - "Photorealistic cinematic shot"
+     - "Marker illustration on whiteboard"
+     - "Digital flat design with gradients"
+     - "Watercolor painting aesthetic"
+   - Lighting and atmosphere (warm, cool, dramatic, soft)
+
+4. **Subject Consistency** (for character/object scenes):
+   - Describe distinctive features for consistency:
+     - Character: clothing, accessories, hairstyle, age, expression
+     - Objects: material, color, shape, brand details
+   - Specify if same subject appears multiple times
+
+5. **Composition & Camera**:
+   - Layout: top-down, isometric, split-screen, grid layout, centered
+   - Camera angle (if applicable): wide shot, close-up, eye-level, bird's eye view
+   - Aspect ratio and framing
+
+# Output Format - Natural Language Prompt
+
+Generate a coherent paragraph following this flow:
+1. **Context & Type**: Define the image type (e.g., "A hand-drawn mind map about...", "A cinematic movie still showing...")
+2. **Content & Logic**: Describe the scene's action OR the diagram's data flow/relationships
+3. **Text Specification**: Explicitly state visible text and its style (e.g., "Render the title '專案管理' in bold black marker", "Display '2024' in floating 3D white letters")
+4. **Visual Style & Atmosphere**: Medium, materials, lighting, color palette
+5. **Composition**: Camera angle, layout structure, perspective
+
+# Example Prompts
+
+**Example 1 (Mind Map):**
+"Generate a hand-drawn mind map on a textured paper background. The central node contains the text '專案管理' in bold black marker style. Four branches radiate outward in different colors (red, blue, green, yellow), labeled 'Planning', 'Execution', 'Monitoring', and 'Closing'. Small doodle icons represent each phase (calendar, gear, chart, checkmark). The style should look like a professional study note with clean lines, high legibility, and warm lighting."
+
+**Example 2 (Split-Screen Scene):**
+"A split-screen comparison showing the same street corner in two seasons. Left side displays 'SUMMER' in floating white 3D letters at the top, showing sunny weather with green trees and people in t-shirts. Right side shows 'WINTER' in icy blue 3D text, depicting snow-covered streets and bare branches. Maintain the exact same perspective, building architecture, and camera angle on both sides. Photorealistic rendering with cinematic color grading."
+
+**Example 3 (Infographic):**
+"Create a vertical timeline infographic titled 'AI 發展史' at the top in bold modern sans-serif font. Five milestone nodes arranged vertically from 1956 to 2024, each with a year label in large numbers, a circular icon, and a brief description in Traditional Chinese. Connect nodes with a flowing blue gradient line. Use a clean white background with subtle shadows for depth. Professional business presentation style."
+
+# JSON Output Structure
+
+Based on your analysis, return the following JSON format (no markdown blocks):
+
 {
-  "positive_prompt": "detailed English prompt here...",
-  "positive_prompt_zh": "完整的繁體中文翻譯在這裡...",
-  "negative_prompt": "low quality, blurry, ...",
-  "tags": ["english_tag", "中文標籤", "another_tag", "另一個標籤", ...],
-  "category": "Architecture"
+  "positive_prompt": "[Natural language paragraph following the flow above - in English, 50-150 words]",
+  "positive_prompt_zh": "[完整的繁體中文翻譯段落，必須包含所有細節與文字指令]",
+  "negative_prompt": "low quality, blurry, distorted, pixelated, watermark, signature, out of focus, amateur, messy layout, illegible text",
+  "tags": ["keyword1", "關鍵字1", "keyword2", "關鍵字2", ...],
+  "category": "Art"
 }
 
-CRITICAL: You MUST include positive_prompt_zh (Traditional Chinese translation). Tags MUST mix English and Chinese. Response must be ONLY valid JSON."""
+# Available Categories
+- Portrait (人像/肖像) - people photos, portraits
+- Landscape (風景) - nature, scenery, cityscapes
+- Animal (動物) - pets, wildlife
+- Architecture (建築) - buildings, interiors
+- Sci-Fi (科幻) - futuristic, robots, space
+- Art (藝術/插畫) - illustrations, diagrams, infographics, mind maps
+- Food (食物) - cuisine, dishes
+- Fashion (時尚) - clothing, accessories
+- Other (其他) - anything else
+
+# CRITICAL VALIDATION
+- positive_prompt MUST be a natural paragraph (not comma-separated keywords)
+- If any text is visible in the image, you MUST transcribe it in the prompt
+- positive_prompt_zh MUST be a complete Traditional Chinese translation
+- tags MUST mix English and Chinese (5-8 tags: style, content, layout type)
+- category MUST match one of the predefined options
+- Focus on LOGICAL STRUCTURE for diagrams/charts, NARRATIVE FLOW for scenes
+- Response MUST be ONLY valid JSON (no ```json markdown)"""
 
 
 def extract_tags_from_text(text: str) -> tuple[list[str], str]:
@@ -104,7 +166,6 @@ Output JSON only:
     except Exception as e:
         print(f"⚠️ Tags 提取失敗: {e}")
         # 簡單回退：用逗號或空格分割
-        import re
         words = re.findall(r'\b\w{3,}\b', text[:200])
         return (words[:5] if words else ["未分類", "uncategorized"], "Other")
 
@@ -121,8 +182,6 @@ def translate_prompt(text: str) -> Dict[str, str]:
     Returns:
         包含 'english' 和 'chinese' 的字典
     """
-    import re
-    
     # 超長 prompt：保留原文 + 簡化說明
     if len(text) > 1000:
         print(f"📄 Prompt 較長 ({len(text)} 字元)")
