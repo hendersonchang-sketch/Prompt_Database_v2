@@ -200,6 +200,218 @@
         #scrollToTop:active {
             transform: translateY(-2px) scale(1.05);
         }
+
+        /* 圖片預覽 Modal */
+        .image-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-modal.hidden {
+            display: none;
+        }
+
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            cursor: pointer;
+        }
+
+        .modal-content {
+            position: relative;
+            width: 90vw;
+            /* 固定寬度比例，避免過窄 */
+            max-width: 1200px;
+            /* 最大寬度限制 */
+            max-height: 90vh;
+            z-index: 2001;
+            display: flex;
+            /* 改用 Flex 佈局 */
+            flex-direction: column;
+            align-items: center;
+            background: transparent;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 0;
+            right: -50px;
+            /* 移到容器外右側，避免遮擋內容 */
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            font-size: 32px;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: rotate(90deg);
+        }
+
+        .modal-prev,
+        .modal-next {
+            position: fixed;
+            /* 改為 fixed 避免隨內容移動 */
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.5);
+            border: none;
+            color: white;
+            font-size: 48px;
+            width: 60px;
+            height: 60px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-radius: 50%;
+            z-index: 2002;
+        }
+
+        .modal-prev {
+            left: 20px;
+        }
+
+        .modal-next {
+            right: 20px;
+        }
+
+        .modal-prev:hover,
+        .modal-next:hover {
+            background: rgba(255, 215, 0, 0.8);
+            color: black;
+        }
+
+        #modalImage {
+            max-width: 100%;
+            max-height: 65vh;
+            /* 留空間給資訊區 */
+            object-fit: contain;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        .modal-info {
+            position: static;
+            /* 移除絕對定位 */
+            width: 100%;
+            background: #1f2937;
+            /* 使用實色背景 */
+            padding: 20px;
+            border-radius: 12px;
+            max-height: 25vh;
+            /* 限制高度 */
+            overflow-y: auto;
+            /* 內容過多時捲動 */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .modal-title {
+            color: #FFD700;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        #modalPrompt {
+            color: white;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        /* 收藏按鈕 */
+        .favorite-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            transition: transform 0.2s;
+            z-index: 10;
+        }
+
+        .favorite-btn:hover {
+            transform: scale(1.2);
+        }
+
+        .favorite-btn.favorited {
+            color: #FFD700;
+        }
+
+        /* 上傳進度條 */
+        .upload-progress {
+            position: fixed;
+            bottom: 100px;
+            right: 24px;
+            background: #1f2937;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            min-width: 300px;
+            z-index: 1001;
+        }
+
+        .upload-progress.hidden {
+            display: none;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #FFD700, #FFA500);
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .progress-text {
+            color: white;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .progress-stages {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .stage {
+            opacity: 0.3;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .stage.active {
+            opacity: 1;
+            font-weight: bold;
+            color: #FFD700;
+        }
     </style>
 </head>
 
@@ -319,6 +531,37 @@
         ⬆️
     </div>
 
+    <!-- 圖片預覽 Modal -->
+    <div id="imageModal" class="image-modal hidden">
+        <div class="modal-overlay" onclick="closeModal()"></div>
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">✕</button>
+            <button class="modal-prev" onclick="showPrevImage()">&#8249;</button>
+            <button class="modal-next" onclick="showNextImage()">&#8250;</button>
+            <img id="modalImage" src="" alt="">
+            <div class="modal-info">
+                <h3 class="modal-title">English Prompt</h3>
+                <p id="modalPrompt"></p>
+                <h3 class="modal-title" style="margin-top: 12px;">繁體中文</h3>
+                <p id="modalPromptZh"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 上傳進度條 -->
+    <div id="uploadProgress" class="upload-progress hidden">
+        <div class="progress-bar">
+            <div class="progress-fill"></div>
+        </div>
+        <div class="progress-text">準備中... 0%</div>
+        <div class="progress-stages">
+            <span class="stage" data-stage="upload">📤 上傳</span>
+            <span class="stage" data-stage="analyze">🔍 分析</span>
+            <span class="stage" data-stage="translate">🌐 翻譯</span>
+            <span class="stage" data-stage="done">✅ 完成</span>
+        </div>
+    </div>
+
     <script>
         // ========== 全域變數 ==========
         const API_BASE = window.location.origin;
@@ -344,6 +587,9 @@
         let categoriesData = [];
         let currentCategory = null;
 
+        // 所有圖片資料（用於 Modal 切換）
+        let allImages = [];
+
         // ========== 回到頂部按鈕功能 ==========
         // 監聽滾動，顯示/隱藏按鈕
         window.addEventListener('scroll', () => {
@@ -361,6 +607,118 @@
                 behavior: 'smooth'
             });
         });
+
+        // ========== 圖片預覽 Modal 功能 ==========
+        let currentModalIndex = 0;
+        let modalImages = [];
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+        const modalPrompt = document.getElementById('modalPrompt');
+        const modalPromptZh = document.getElementById('modalPromptZh');
+
+        function openModal(imageData, allImages) {
+            modalImages = allImages;
+            currentModalIndex = allImages.findIndex(img => img.id === imageData.id);
+
+            if (currentModalIndex === -1) return;
+
+            displayModalImage(currentModalIndex);
+            imageModal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            imageModal.classList.add('hidden');
+        }
+
+        function showPrevImage() {
+            currentModalIndex = (currentModalIndex - 1 + modalImages.length) % modalImages.length;
+            displayModalImage(currentModalIndex);
+        }
+
+        function showNextImage() {
+            currentModalIndex = (currentModalIndex + 1) % modalImages.length;
+            displayModalImage(currentModalIndex);
+        }
+
+        function displayModalImage(index) {
+            const img = modalImages[index];
+            modalImage.src = `${API_BASE}/uploads/${img.filename}`;
+            modalPrompt.textContent = img.positive_prompt || '無提示詞';
+            modalPromptZh.textContent = img.positive_prompt_zh || '無中文翻譯';
+        }
+
+        // 鍵盤快捷鍵
+        document.addEventListener('keydown', (e) => {
+            if (!imageModal.classList.contains('hidden')) {
+                if (e.key === 'Escape') closeModal();
+                if (e.key === 'ArrowLeft') showPrevImage();
+                if (e.key === 'ArrowRight') showNextImage();
+            }
+        });
+
+        // ========== 收藏功能 ==========
+        async function toggleFavorite(imageId, event) {
+            event.stopPropagation(); // 防止觸發卡片點擊
+
+            try {
+                const response = await fetch(`/api/images/${imageId}/favorite`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // 更新按鈕狀態
+                    const btn = event.target.closest('.favorite-btn');
+                    if (btn) {
+                        btn.classList.toggle('favorited', data.is_favorited);
+                        btn.textContent = data.is_favorited ? '⭐' : '☆';
+                    }
+
+                    // 重新載入分類統計
+                    loadCategoriesBar();
+
+                    showToast(data.message, 'success');
+                }
+            } catch (error) {
+                console.error('收藏操作失敗:', error);
+                showToast('❌ 收藏操作失敗', 'error');
+            }
+        }
+
+        // ========== 上傳進度條功能 ==========
+        function updateProgress(percent, stage) {
+            const progressEl = document.getElementById('uploadProgress');
+            progressEl.classList.remove('hidden');
+
+            // 更新進度條
+            const fill = progressEl.querySelector('.progress-fill');
+            fill.style.width = `${percent}%`;
+
+            // 更新文字
+            const text = progressEl.querySelector('.progress-text');
+            text.textContent = `${getStageText(stage)}... ${percent}%`;
+
+            // 高亮當前階段
+            document.querySelectorAll('.stage').forEach(s => {
+                s.classList.toggle('active', s.dataset.stage === stage);
+            });
+        }
+
+        function getStageText(stage) {
+            switch (stage) {
+                case 'upload': return '上傳中';
+                case 'analyze': return 'AI 分析中';
+                case 'translate': return '翻譯中';
+                case 'done': return '完成';
+                default: return '處理中';
+            }
+        }
+
+        function hideProgress() {
+            setTimeout(() => {
+                document.getElementById('uploadProgress').classList.add('hidden');
+            }, 1000);
+        }
 
         // ========== 拖放上傳事件 ==========
         dropZone.addEventListener('dragover', (e) => {
@@ -467,6 +825,7 @@
         // ========== 渲染圖庫函式 ==========
         function renderGallery(images) {
             gallery.innerHTML = '';
+            allImages = images; // 儲存到全域變數
 
             images.forEach(image => {
                 const card = createImageCard(image);
@@ -477,7 +836,7 @@
         // ========== 建立圖片卡片函式 ==========
         function createImageCard(image) {
             const div = document.createElement('div');
-            div.className = 'masonry-item bg-gray-900 rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition';
+            div.className = 'masonry-item relative bg-gray-900 rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition';
             div.dataset.imageId = image.id;
 
             const imageUrl = `${API_BASE}/uploads/${image.filename}`;
@@ -486,7 +845,11 @@
                 <div class="checkbox-overlay">
                     <input type="checkbox" onchange="toggleImageSelection(${image.id})" ${selectedImages.has(image.id) ? 'checked' : ''}>
                 </div>
-                <img src="${imageUrl}" alt="Image ${image.id}" class="w-full h-auto">
+                <button class="favorite-btn ${image.is_favorited ? 'favorited' : ''}" 
+                        onclick="toggleFavorite(${image.id}, event)">
+                    ${image.is_favorited ? '⭐' : '☆'}
+                </button>
+                <img src="${imageUrl}" alt="Image ${image.id}" class="w-full h-auto cursor-pointer">
                 <div class="p-4">
                     <!-- 英文提示詞 -->
                     <div class="mb-3">
@@ -598,6 +961,17 @@
                     checkbox.checked = selectedImages.has(image.id);
                 }
             });
+
+            // 為圖片添加點擊事件（非多選模式下打開 Modal）
+            const imgElement = div.querySelector('img');
+            if (imgElement) {
+                imgElement.addEventListener('click', (e) => {
+                    if (!isSelectionMode) {
+                        e.stopPropagation();
+                        openModal(image, allImages);
+                    }
+                });
+            }
 
             return div;
         }
@@ -907,6 +1281,48 @@
             searchResultsInfo.classList.add('hidden');
             currentCategory = null;
             loadGallery();
+        }
+
+        // ========== 收藏功能 ==========
+        async function toggleFavorite(imageId, event) {
+            event.stopPropagation(); // 防止觸發卡片點擊
+
+            try {
+                const response = await fetch(`${API_BASE}/api/images/${imageId}/favorite`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // 更新按鈕狀態
+                    const btn = event.target.closest('.favorite-btn');
+                    if (btn) {
+                        if (data.is_favorited) {
+                            btn.classList.add('favorited');
+                            btn.textContent = '⭐';
+                        } else {
+                            btn.classList.remove('favorited');
+                            btn.textContent = '☆';
+                        }
+                    }
+
+                    // 更新全域 allImages 中的狀態
+                    const img = allImages.find(i => i.id === imageId);
+                    if (img) {
+                        img.is_favorited = data.is_favorited;
+                    }
+
+                    // 重新載入分類統計
+                    loadCategories();
+
+                    showToast(data.message, 'success');
+                } else {
+                    showToast(data.message || '收藏操作失敗', 'error');
+                }
+            } catch (error) {
+                console.error('收藏操作失敗:', error);
+                showToast('❌ 收藏操作失敗', 'error');
+            }
         }
 
         // ========== 頁面載入時自動載入圖庫 ==========

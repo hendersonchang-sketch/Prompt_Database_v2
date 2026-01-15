@@ -8,7 +8,9 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 
-DB_NAME = "bananadb.db"
+import os
+
+DB_NAME = os.getenv("BANANADB_DB_NAME", "bananadb.db")
 
 
 def init_db() -> None:
@@ -39,7 +41,13 @@ def init_db() -> None:
             print("🔄 執行資料庫遷移：新增 category 欄位")
             cursor.execute("ALTER TABLE images ADD COLUMN category TEXT DEFAULT 'Other'")
             conn.commit()
-            print("✅ 資料庫遷移完成")
+            print("✅ category 欄位遷移完成")
+        
+        if 'is_favorited' not in columns:
+            print("🔄 執行資料庫遷移：新增 is_favorited 欄位")
+            cursor.execute("ALTER TABLE images ADD COLUMN is_favorited BOOLEAN DEFAULT FALSE")
+            conn.commit()
+            print("✅ is_favorited 欄位遷移完成")
     except Exception as e:
         print(f"⚠️ 資料庫遷移警告: {e}")
     
@@ -106,7 +114,7 @@ def get_all_images() -> List[Dict[str, Any]]:
     
     cursor.execute("""
         SELECT id, filename, positive_prompt, positive_prompt_zh,
-               negative_prompt, tags, source_url, category, created_at
+               negative_prompt, tags, source_url, category, is_favorited, created_at
         FROM images
         ORDER BY created_at DESC
     """)
@@ -265,6 +273,94 @@ def get_images_by_category(category: str) -> List[Dict[str, Any]]:
         WHERE category = ?
         ORDER BY created_at DESC
     """, (category,))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    images = []
+    for row in rows:
+        image_dict = dict(row)
+        try:
+            image_dict['tags'] = json.loads(image_dict['tags'])
+        except (json.JSONDecodeError, TypeError):
+            image_dict['tags'] = []
+        images.append(image_dict)
+    
+    return images
+
+
+def get_favorites_count() -> int:
+    """
+    取得已收藏圖片的總數
+    
+    Returns:
+        收藏圖片數量
+    """
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT COUNT(*) FROM images WHERE is_favorited = 1")
+    count = cursor.fetchone()[0]
+    
+    conn.close()
+    return count
+
+
+def toggle_favorite(image_id: int) -> bool:
+    """
+    切換圖片的收藏狀態
+    
+    Args:
+        image_id: 圖片 ID
+    
+    Returns:
+        新的收藏狀態 (True=已收藏, False=未收藏)
+    """
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    # 查詢當前狀態
+    cursor.execute("SELECT is_favorited FROM images WHERE id = ?", (image_id,))
+    row = cursor.fetchone()
+    
+    if not row:
+        conn.close()
+        return False
+    
+    current_status = bool(row[0])
+    new_status = not current_status
+    
+    # 更新狀態
+    cursor.execute(
+        "UPDATE images SET is_favorited = ? WHERE id = ?",
+        (new_status, image_id)
+    )
+    
+    conn.commit()
+    conn.close()
+    
+    print(f"{'⭐' if new_status else '☆'} 圖片 ID {image_id} 收藏狀態: {new_status}")
+    return new_status
+
+
+def get_favorited_images() -> List[Dict[str, Any]]:
+    """
+    查詢所有已收藏的圖片記錄
+    
+    Returns:
+        已收藏的圖片記錄列表
+    """
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT id, filename, positive_prompt, positive_prompt_zh,
+               negative_prompt, tags, source_url, category, is_favorited, created_at
+        FROM images
+        WHERE is_favorited = TRUE
+        ORDER BY created_at DESC
+    """)
     
     rows = cursor.fetchall()
     conn.close()

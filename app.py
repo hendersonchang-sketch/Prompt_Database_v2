@@ -14,7 +14,9 @@ from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 import requests
 
-from database import init_db, insert_image, get_all_images, delete_image, delete_images_batch, get_categories_stats, get_images_by_category
+from database import (init_db, insert_image, get_all_images, delete_image, 
+                      delete_images_batch, get_categories_stats, get_images_by_category,
+                      toggle_favorite, get_favorited_images, get_favorites_count)
 from ai_engine import analyze_image, search_images_with_gemini, extract_tags_from_text
 
 
@@ -241,7 +243,10 @@ async def list_images(category: Optional[str] = None):
     """
     try:
         if category:
-            images = get_images_by_category(category)
+            if category == 'favorites':
+                images = get_favorited_images()
+            else:
+                images = get_images_by_category(category)
         else:
             images = get_all_images()
         
@@ -368,6 +373,16 @@ async def get_categories():
         # 加入計數
         for cat in default_categories:
             cat["count"] = stats.get(cat["id"], 0)
+
+        # 🚀 插入「收藏」分類到第一位 (或最前面)
+        favorites_count = get_favorites_count()
+        if favorites_count > 0:
+            default_categories.insert(0, {
+                "id": "favorites", 
+                "label": "⭐ 收藏", 
+                "color": "bg-yellow-500",
+                "count": favorites_count
+            })
         
         return JSONResponse(content={
             "success": True,
@@ -376,6 +391,51 @@ async def get_categories():
     except Exception as e:
         print(f"❌ 分類查詢失敗: {e}")
         raise HTTPException(status_code=500, detail=f"分類查詢失敗: {str(e)}")
+
+
+@app.post("/api/images/{image_id}/favorite")
+async def toggle_image_favorite(image_id: int):
+    """
+    切換圖片的收藏狀態
+    
+    Args:
+        image_id: 圖片 ID
+    
+    Returns:
+        新的收藏狀態
+    """
+    try:
+        new_status = toggle_favorite(image_id)
+        
+        return JSONResponse(content={
+            "success": True,
+            "is_favorited": new_status,
+            "message": f"圖片已{'加入' if new_status else '移除'}收藏"
+        })
+    except Exception as e:
+        print(f"❌ 收藏操作失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"收藏操作失敗: {str(e)}")
+
+
+@app.get("/api/images/favorited")
+async def list_favorited_images():
+    """
+    取得所有已收藏的圖片
+    
+    Returns:
+        收藏圖片列表
+    """
+    try:
+        images = get_favorited_images()
+        
+        return JSONResponse(content={
+            "success": True,
+            "count": len(images),
+            "data": images
+        })
+    except Exception as e:
+        print(f"❌ 收藏查詢失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"收藏查詢失敗: {str(e)}")
 
 
 # 掛載靜態檔案（圖片存取）
