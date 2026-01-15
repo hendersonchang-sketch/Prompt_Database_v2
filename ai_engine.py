@@ -112,8 +112,10 @@ Based on your analysis, return the following JSON format (no markdown blocks):
 # CRITICAL VALIDATION
 - positive_prompt MUST be a natural paragraph (not comma-separated keywords)
 - If any text is visible in the image, you MUST transcribe it in the prompt
-- positive_prompt_zh MUST be a complete Traditional Chinese translation
-- tags MUST mix English and Chinese (5-8 tags: style, content, layout type)
+- positive_prompt_zh MUST be a COMPLETE Traditional Chinese translation of positive_prompt (MANDATORY, cannot be empty)
+- tags MUST include BOTH English and Traditional Chinese tags in the SAME array (e.g., ["embroidery", "刺繡", "bird", "鳥", "flower", "花"])
+- IMPORTANT: At least 40% of tags must be in Traditional Chinese characters
+- tags should have 6-10 items total (mixed English and Chinese)
 - category MUST match one of the predefined options
 - Focus on LOGICAL STRUCTURE for diagrams/charts, NARRATIVE FLOW for scenes
 - Response MUST be ONLY valid JSON (no ```json markdown)"""
@@ -172,9 +174,7 @@ Output JSON only:
 
 def translate_prompt(text: str) -> Dict[str, str]:
     """
-    自動偵測並翻譯 prompt
-    - 短 prompt: 完整翻譯
-    - 長 prompt (>1000字): 保留原文 + 簡化說明
+    使用 Gemini 翻譯 prompt（無長度限制）
     
     Args:
         text: 要翻譯的文字
@@ -182,43 +182,32 @@ def translate_prompt(text: str) -> Dict[str, str]:
     Returns:
         包含 'english' 和 'chinese' 的字典
     """
-    # 超長 prompt：保留原文 + 簡化說明
-    if len(text) > 1000:
-        print(f"📄 Prompt 較長 ({len(text)} 字元)")
-        
-        has_chinese = bool(re.search(r'[\u4e00-\u9fff]', text))
-        
-        if has_chinese:
-            print("➡️ 偵測到中文，保留原文")
-            return {'english': '', 'chinese': text}
-        
-        # 英文長 prompt：簡化說明
-        print("➡️ Prompt 過長，保留完整英文，中文欄位顯示簡化說明")
-        
-        # 提取關鍵詞
-        clean = re.sub(r'<[^>]+>', '', text[:300])
-        clean = re.sub(r'[{}()\[\]"\'<>]', ' ', clean)
-        words = re.findall(r'\b[A-Za-z]{4,}\b', clean)
-        keywords = ' '.join(words[:8])
-        
-        chinese_note = f"長指令 - 主題關鍵字：{keywords}"
-        return {'english': text, 'chinese': chinese_note}
+    # 如果已經是中文，直接返回
+    has_chinese = bool(re.search(r'[\u4e00-\u9fff]', text))
+    if has_chinese:
+        print("➡️ 偵測到中文，保留原文")
+        return {'english': '', 'chinese': text}
     
-    # 正常長度：完整翻譯
     print(f"🔄 開始翻譯 ({len(text)} 字元)")
+    
     
     try:
         model = genai.GenerativeModel('gemini-2.0-flash')
         
-        # 超級簡化的 prompt
-        prompt = f"""Translate this text to Traditional Chinese (Taiwan):
+        # 明確要求完整翻譯
+        prompt = f"""Translate the following AI image prompt into Traditional Chinese (Taiwan).
 
+REQUIREMENTS:
+1. Translate the ENTIRE text completely and accurately
+2. Use Traditional Chinese characters (繁體中文)
+3. Maintain all technical terms and details
+4. Do NOT summarize or shorten the translation
+5. Output ONLY the Traditional Chinese translation (no English, no explanations, no markdown)
+
+Text to translate:
 {text}
 
-IMPORTANT: 
-- Output ONLY the Traditional Chinese translation
-- Do NOT include the original English
-- Do NOT use any markdown or code blocks"""
+IMPORTANT: Provide a COMPLETE translation of ALL the content above."""
 
         print(f"📤 發送翻譯請求...")
         response = model.generate_content(prompt)
