@@ -154,15 +154,35 @@
 </head>
 
 <body class="min-h-screen">
-    <!-- 標題列 -->
-    <header class="py-8 px-6 border-b border-gray-800">
+    <!-- 標題列與搜尋 -->
+    <header class="py-8 px-6 border-b border-gray-800 bg-gray-900 sticky top-0 z-50 shadow-md">
         <div class="max-w-7xl mx-auto">
-            <h1 class="text-5xl font-bold text-center">
+            <h1 class="text-5xl font-bold text-center mb-6 cursor-pointer" onclick="resetSearch()">
                 🍌 <span style="color: #FFD700;">Banana</span>DB
             </h1>
-            <p class="text-center text-gray-400 mt-2">本地 AI 圖片資料庫與提示詞逆向工程系統</p>
+
+            <!-- AI 搜尋列 -->
+            <div class="max-w-3xl mx-auto relative group">
+                <input type="text" id="searchInput"
+                    class="w-full bg-gray-800 border-2 border-gray-700 text-white px-6 py-4 rounded-full text-lg focus:outline-none focus:border-yellow-500 transition-colors shadow-lg pl-14"
+                    placeholder="✨ AI Search: 描述你想找的圖片（例如：科幻風格的貓、紅色跑車...）" onkeypress="handleSearch(event)">
+                <span class="absolute left-5 top-1/2 transform -translate-y-1/2 text-2xl">🔍</span>
+                <button onclick="performSearch()"
+                    class="absolute right-3 top-1/2 transform -translate-y-1/2 bg-yellow-500 text-black px-6 py-2 rounded-full font-bold hover:bg-yellow-400 transition transform hover:scale-105">
+                    Search
+                </button>
+            </div>
         </div>
     </header>
+
+    <!-- 分類篩選列 -->
+    <section class="sticky top-[140px] z-40 bg-gray-950 border-b border-gray-800 py-4 px-6 shadow-md">
+        <div class="max-w-7xl mx-auto overflow-x-auto">
+            <div id="categoriesBar" class="flex gap-3 pb-2" style="min-width: max-content;">
+                <!-- 分類按鈕將由 JS 動態生成 -->
+            </div>
+        </div>
+    </section>
 
     <!-- 上傳區域 -->
     <section class="py-8 px-6">
@@ -211,10 +231,19 @@
                 </div>
             </div>
 
+            <!-- 搜尋結果提示 -->
+            <div id="searchResultsInfo" class="hidden mb-6 text-center">
+                <p class="text-xl text-white">🔍 搜尋結果: <span id="searchQueryDisplay"
+                        class="text-yellow-500 font-bold"></span></p>
+                <button onclick="resetSearch()" class="mt-2 text-gray-400 hover:text-white underline text-sm">
+                    清除搜尋，顯示全部
+                </button>
+            </div>
+
             <!-- 載入中 -->
             <div id="loadingIndicator" class="text-center py-12">
                 <div class="spinner mx-auto"></div>
-                <p class="mt-4 text-gray-400">載入中...</p>
+                <p id="loadingText" class="mt-4 text-gray-400">載入中...</p>
             </div>
 
             <!-- 空狀態 -->
@@ -241,10 +270,19 @@
         const emptyState = document.getElementById('emptyState');
         const uploadContent = document.getElementById('uploadContent');
         const uploadingContent = document.getElementById('uploadingContent');
+        const searchInput = document.getElementById('searchInput');
+        const searchResultsInfo = document.getElementById('searchResultsInfo');
+        const searchQueryDisplay = document.getElementById('searchQueryDisplay');
+        const loadingText = document.getElementById('loadingText');
+        const categoriesBar = document.getElementById('categoriesBar');
 
         // 多選模式狀態
         let isSelectionMode = false;
         let selectedImages = new Set();
+
+        // 分類狀態
+        let categoriesData = [];
+        let currentCategory = null;
 
         // ========== 拖放上傳事件 ==========
         dropZone.addEventListener('dragover', (e) => {
@@ -419,6 +457,15 @@
                     ${image.tags && image.tags.length > 0 ? `
                     <div class="mb-3">
                         ${image.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+                    </div>
+                    ` : ''}
+                    
+                    <!-- 分類標籤 -->
+                    ${image.category && image.category !== 'Other' ? `
+                    <div class="mb-2">
+                        <span class="inline-block px-2 py-1 rounded text-xs font-bold ${getCategoryColor(image.category)} text-white">
+                            ${getCategoryLabel(image.category)}
+                        </span>
                     </div>
                     ` : ''}
                     
@@ -610,9 +657,157 @@
             }
         }
 
+        // ========== 分類功能 ==========
+        async function loadCategories() {
+            try {
+                const response = await fetch(`${API_BASE}/api/categories`);
+                const result = await response.json();
+
+                if (result.success) {
+                    categoriesData = result.data;
+                    renderCategories();
+                }
+            } catch (error) {
+                console.error('分類載入失敗:', error);
+            }
+        }
+
+        function renderCategories() {
+            categoriesBar.innerHTML = '';
+
+            // 「全部」按鈕
+            const allBtn = createCategoryButton(
+                { id: null, label: '全部', count: categoriesData.reduce((sum, cat) => sum + cat.count, 0), color: 'bg-yellow-500' },
+                true
+            );
+            categoriesBar.appendChild(allBtn);
+
+            // 各分類按鈕
+            categoriesData.forEach(cat => {
+                if (cat.count > 0) {  // 只顯示有圖片的分類
+                    const btn = createCategoryButton(cat);
+                    categoriesBar.appendChild(btn);
+                }
+            });
+        }
+
+        function createCategoryButton(category, isAll = false) {
+            const btn = document.createElement('button');
+            const isActive = isAll ? (currentCategory === null) : (currentCategory === category.id);
+
+            btn.className = `px-4 py-2 rounded-full font-bold text-sm transition transform hover:scale-105 ${isActive ? category.color + ' text-white shadow-lg' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`;
+
+            btn.textContent = `${category.label} (${category.count})`;
+            btn.onclick = () => filterByCategory(isAll ? null : category.id);
+
+            return btn;
+        }
+
+        async function filterByCategory(categoryId) {
+            currentCategory = categoryId;
+            searchResultsInfo.classList.add('hidden');
+
+            loadingIndicator.classList.remove('hidden');
+            gallery.classList.add('hidden');
+            emptyState.classList.add('hidden');
+
+            try {
+                const url = categoryId
+                    ? `${API_BASE}/api/images?category=${encodeURIComponent(categoryId)}`
+                    : `${API_BASE}/api/images`;
+
+                const response = await fetch(url);
+                const result = await response.json();
+
+                if (result.success) {
+                    renderCategories();  // 更新按鈕狀態
+                    if (result.data.length > 0) {
+                        renderGallery(result.data);
+                        gallery.classList.remove('hidden');
+                    } else {
+                        emptyState.classList.remove('hidden');
+                    }
+                }
+            } catch (error) {
+                console.error('分類篩選失敗:', error);
+                showToast('❌ 篩選失敗', 'error');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+
+        function getCategoryColor(categoryId) {
+            const cat = categoriesData.find(c => c.id === categoryId);
+            return cat ? cat.color : 'bg-gray-500';
+        }
+
+        function getCategoryLabel(categoryId) {
+            const cat = categoriesData.find(c => c.id === categoryId);
+            return cat ? cat.label : categoryId;
+        }
+
+        // ========== 搜尋功能 ==========
+        function handleSearch(event) {
+            if (event.key === 'Enter') {
+                performSearch();
+            }
+        }
+
+        async function performSearch() {
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            // UI 狀態更新
+            gallery.classList.add('hidden');
+            emptyState.classList.add('hidden');
+            loadingIndicator.classList.remove('hidden');
+            loadingText.textContent = "✨ AI 正在思考並搜尋圖片中...";
+
+            try {
+                const response = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(query)}`);
+
+                if (!response.ok) {
+                    throw new Error(`搜尋失敗: HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // 更新結果提示
+                    searchResultsInfo.classList.remove('hidden');
+                    searchQueryDisplay.textContent = query;
+
+                    if (result.data.length > 0) {
+                        renderGallery(result.data);
+                        gallery.classList.remove('hidden');
+                        showToast(`🔍 找到 ${result.data.length} 張相關圖片`, 'success');
+                    } else {
+                        emptyState.classList.remove('hidden');
+                        showToast('找不到符合條件的圖片', 'info');
+                    }
+                }
+            } catch (error) {
+                console.error('搜尋錯誤:', error);
+                showToast('❌ 搜尋失敗', 'error');
+                loadingIndicator.classList.add('hidden');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                loadingText.textContent = "載入中...";
+            }
+        }
+
+        function resetSearch() {
+            searchInput.value = '';
+            searchResultsInfo.classList.add('hidden');
+            currentCategory = null;
+            loadGallery();
+        }
+
         // ========== 頁面載入時自動載入圖庫 ==========
         window.addEventListener('load', () => {
-            loadGallery();
+            loadCategories();  // 載入分類
+            loadGallery();     // 載入圖庫
         });
     </script>
 </body>

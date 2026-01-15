@@ -14,8 +14,8 @@ from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 import requests
 
-from database import init_db, insert_image, get_all_images, delete_image, delete_images_batch
-from ai_engine import analyze_image
+from database import init_db, insert_image, get_all_images, delete_image, delete_images_batch, get_categories_stats, get_images_by_category
+from ai_engine import analyze_image, search_images_with_gemini, extract_tags_from_text
 
 
 # 初始化 FastAPI 應用程式
@@ -111,30 +111,55 @@ async def collect_url(request: CollectURLRequest):
         
         # 3. AI 分析或使用提供的 prompt
         if request.skip_ai and request.context_text:
-            # 使用者提供的 prompt，跳過 AI 分析但自動翻譯
-            print("⚡ 跳過 AI 分析，使用提供的 prompt 並自動翻譯")
+            # 使用者提供的 prompt，跳過 AI 分析但自動翻譯並提取 tags
+            print("\n" + "="*60)
+            print("⚡ 跳過 AI 分析，使用提供的 prompt 並自動翻譯 + 提取 tags + 判斷分類")
+            print(f"📝 原始 Prompt 長度: {len(request.context_text)} 字元")
+            print(f"📝 Prompt 預覽: {request.context_text[:100]}...")
+            print("="*60 + "\n")
+            
             from ai_engine import translate_prompt
             
+            # 翻譯
+            print("🔄 開始翻譯...")
             translation = translate_prompt(request.context_text)
+            print(f"✅ 翻譯結果:")
+            print(f"   - English: {translation.get('english', '')[:80]}...")
+            print(f"   - Chinese: {translation.get('chinese', '')[:80]}...")
+            
+            # 提取 tags 與 category
+            print("\n🏷️ 開始提取 tags...")
+            tags, category = extract_tags_from_text(request.context_text)
+            print(f"✅ Tags 提取結果: {tags}")
+            print(f"✅ 分類: {category}")
             
             analysis_result = {
                 'positive_prompt': translation['english'] or request.context_text,
                 'positive_prompt_zh': translation['chinese'],
                 'negative_prompt': 'low quality, blurry',
-                'tags': []
+                'tags': tags,
+                'category': category
             }
+            
+            print("\n📦 最終 analysis_result:")
+            print(f"   - positive_prompt: {analysis_result['positive_prompt'][:80]}...")
+            print(f"   - positive_prompt_zh: {analysis_result['positive_prompt_zh'][:80]}...")
+            print(f"   - tags: {analysis_result['tags']}")
+            print(f"   - category: {analysis_result['category']}")
+            print("="*60 + "\n")
         else:
             # 正常 AI 分析
             analysis_result = analyze_image(str(filepath), request.context_text)
         
-        # 4. 寫入資料庫
+        # 4. 儲存至資料庫
         image_id = insert_image(
             filename=filename,
             positive_prompt=analysis_result['positive_prompt'],
-            positive_prompt_zh=analysis_result['positive_prompt_zh'],
-            negative_prompt=analysis_result['negative_prompt'],
-            tags=analysis_result['tags'],
-            source_url=request.page_url
+            positive_prompt_zh=analysis_result.get('positive_prompt_zh', ''),
+            negative_prompt=analysis_result.get('negative_prompt', ''),
+            tags=analysis_result.get('tags', []),
+            source_url=request.image_url,
+            category=analysis_result.get('category', 'Other')
         )
         
         return JSONResponse(content={
@@ -207,17 +232,22 @@ async def upload_image(file: UploadFile = File(...)):
 
 
 @app.get("/api/images")
-async def get_images():
+async def list_images(category: Optional[str] = None):
     """
-    查詢所有圖片
+    取得所有圖片資料，或根據分類篩選
     
-    回傳資料庫中的所有圖片記錄，依建立時間倒序排列
+    Args:
+        category: 選填，分類名稱（例如 "Portrait", "Landscape"）
     """
     try:
-        images = get_all_images()
+        if category:
+            images = get_images_by_category(category)
+        else:
+            images = get_all_images()
+        
         return JSONResponse(content={
             "success": True,
-            "message": f"成功查詢 {len(images)} 張圖片",
+            "count": len(images),
             "data": images
         })
     except Exception as e:
@@ -271,6 +301,81 @@ async def delete_multiple_images(request: DeleteImagesRequest):
     except Exception as e:
         print(f"❌ 批次刪除失敗: {e}")
         raise HTTPException(status_code=500, detail=f"批次刪除失敗: {str(e)}")
+
+
+@app.get("/api/search")
+async def search_images(q: str):
+    """
+    AI 智慧搜尋
+    
+    Args:
+        q: 搜尋關鍵字
+    """
+    try:
+        print(f"🔍 AI 搜尋啟動: {q}")
+        
+        # 1. 取得所有圖片資料
+        all_images = get_all_images()
+        
+        if not all_images:
+            return JSONResponse(content={"success": True, "count": 0, "data": []})
+            
+        # 2. 呼叫 Gemini 進行語意搜尋
+        matched_ids = search_images_with_gemini(q, all_images)
+        print(f"✅ 搜尋結果 ID: {matched_ids}")
+        
+        # 3. 過濾並排序結果（保持 AI 回傳的順序）
+        # 建立 ID 到圖片的映射以便快速查找
+        img_map = {img['id']: img for img in all_images}
+        
+        results = []
+        for mid in matched_ids:
+            if mid in img_map:
+                results.append(img_map[mid])
+                
+        return JSONResponse(content={
+            "success": True,
+            "count": len(results),
+            "data": results
+        })
+        
+    except Exception as e:
+        print(f"❌ 搜尋失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"搜尋失敗: {str(e)}")
+
+
+@app.get("/api/categories")
+async def get_categories():
+    """
+    取得所有分類與統計資料
+    """
+    try:
+        stats = get_categories_stats()
+        
+        # 預設分類列表（中英雙語與顏色）
+        default_categories = [
+            {"id": "Portrait", "label": "人像", "color": "bg-blue-600"},
+            {"id": "Landscape", "label": "風景", "color": "bg-green-600"},
+            {"id": "Animal", "label": "動物", "color": "bg-yellow-600"},
+            {"id": "Architecture", "label": "建築", "color": "bg-gray-600"},
+            {"id": "Sci-Fi", "label": "科幻", "color": "bg-purple-600"},
+            {"id": "Art", "label": "藝術", "color": "bg-pink-600"},
+            {"id": "Food", "label": "食物", "color": "bg-orange-600"},
+            {"id": "Fashion", "label": "時尚", "color": "bg-red-600"},
+            {"id": "Other", "label": "其他", "color": "bg-gray-500"}
+        ]
+        
+        # 加入計數
+        for cat in default_categories:
+            cat["count"] = stats.get(cat["id"], 0)
+        
+        return JSONResponse(content={
+            "success": True,
+            "data": default_categories
+        })
+    except Exception as e:
+        print(f"❌ 分類查詢失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"分類查詢失敗: {str(e)}")
 
 
 # 掛載靜態檔案（圖片存取）
