@@ -1,0 +1,161 @@
+﻿python : C:\Users\hende\Doc
+uments\gemini\prompt_databa
+se_V2\test_gemini.py:5: Fut
+ureWarning: 
+位於 線路:1 字元:30
++ .\venv\Scripts\Activate.p
+s1; python test_gemini.py 2
+>&1 | Out-File -F ...
++                          
+    ~~~~~~~~~~~~~~~~~~~~~~~
+~~~
+    + CategoryInfo         
+     : NotSpecified: (C:\  
+  Users\hende\...FutureW   
+ arning: :String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+
+All support for the `google
+.generativeai` package has 
+ended. It will no longer be
+ receiving 
+updates or bug fixes. Pleas
+e switch to the `google.gen
+ai` package as soon as poss
+ible.
+See README for more details
+:
+
+https://github.com/google-g
+emini/deprecated-generative
+-ai-python/blob/main/README
+.md
+
+  import google.generativea
+i as genai
+Traceback (most recent call
+ last):
+  File "C:\Users\hende\Docu
+ments\gemini\prompt_databas
+e_V2\test_gemini.py", line 
+36, in <module>
+    response = model.genera
+te_content([
+        "Describe this imag
+e in one sentence.",
+        image
+    ])
+  File "C:\Users\hende\Docu
+ments\gemini\prompt_databas
+e_V2\venv\Lib\site-packages
+\google\generativeai\genera
+tive_models.py", line 331, 
+in generate_content
+    response = self._client
+.generate_content(
+        request,
+        **request_options,
+    )
+  File "C:\Users\hende\Docu
+ments\gemini\prompt_databas
+e_V2\venv\Lib\site-packages
+\google\ai\generativelangua
+ge_v1beta\services\generati
+ve_service\client.py", line
+ 835, in generate_content
+    response = rpc(
+        request,
+    ...<2 lines>...
+        metadata=metadata,
+    )
+  File "C:\Users\hende\Docu
+ments\gemini\prompt_databas
+e_V2\venv\Lib\site-packages
+\google\api_core\gapic_v1\m
+ethod.py", line 131, in __c
+all__
+    return wrapped_func(*ar
+gs, **kwargs)
+  File "C:\Users\hende\Docu
+ments\gemini\prompt_databas
+e_V2\venv\Lib\site-packages
+\google\api_core\retry\retr
+y_unary.py", line 294, in r
+etry_wrapped_func
+    return retry_target(
+        target,
+    ...<3 lines>...
+        on_error=on_error,
+    )
+  File "C:\Users\hende\Docu
+ments\gemini\prompt_databas
+e_V2\venv\Lib\site-packages
+\google\api_core\retry\retr
+y_unary.py", line 156, in r
+etry_target
+    next_sleep = _retry_err
+or_helper(
+        exc,
+    ...<6 lines>...
+        timeout,
+    )
+  File "C:\Users\hende\Docu
+ments\gemini\prompt_databas
+e_V2\venv\Lib\site-packages
+\google\api_core\retry\retr
+y_base.py", line 214, in _r
+etry_error_helper
+    raise final_exc from so
+urce_exc
+  File "C:\Users\hende\Docu
+ments\gemini\prompt_databas
+e_V2\venv\Lib\site-packages
+\google\api_core\retry\retr
+y_unary.py", line 147, in r
+etry_target
+    result = target()
+  File "C:\Users\hende\Docu
+ments\gemini\prompt_databas
+e_V2\venv\Lib\site-packages
+\google\api_core\timeout.py
+", line 130, in func_with_t
+imeout
+    return func(*args, **kw
+args)
+  File "C:\Users\hende\Docu
+ments\gemini\prompt_databas
+e_V2\venv\Lib\site-packages
+\google\api_core\grpc_helpe
+rs.py", line 77, in error_r
+emapped_callable
+    raise exceptions.from_g
+rpc_error(exc) from exc
+google.api_core.exceptions.
+NotFound: 404 models/gemini
+-1.5-flash is not found for
+ API version v1beta, or is 
+not supported for generateC
+ontent. Call ListModels to 
+see the list of available m
+odels and their supported m
+ethods.
+=== Testing Gemini Vision API ===
+
+1. Available models:
+   - models/gemini-2.5-flash
+   - models/gemini-2.5-pro
+   - models/gemini-2.0-flash-exp
+   - models/gemini-2.0-flash
+   - models/gemini-2.0-flash-001
+
+2. Testing image analysis:
+   Loading image: uploads/36667f24-8e95-40ed-812a-4f615a3040ba.png
+   Image size: (1024, 1024)
+   Image format: PNG
+   Calling Gemini API...
+   ERROR: NotFound: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+
+=== Test Complete ===

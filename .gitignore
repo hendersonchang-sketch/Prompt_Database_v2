@@ -1,0 +1,5 @@
+﻿bananadb.db
+venv/
+__pycache__/
+uploads/
+*.pyc

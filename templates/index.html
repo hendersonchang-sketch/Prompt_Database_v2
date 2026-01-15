@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🍌 BananaDB - AI 圖片資料庫</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body {
+            background-color: #0F0F0F;
+            color: #FFFFFF;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        /* 瀑布流布局（Masonry Grid）*/
+        .masonry-grid {
+            column-count: 3;
+            column-gap: 1.5rem;
+        }
+
+        @media (max-width: 1024px) {
+            .masonry-grid {
+                column-count: 2;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .masonry-grid {
+                column-count: 1;
+            }
+        }
+
+        .masonry-item {
+            break-inside: avoid;
+            margin-bottom: 1.5rem;
+        }
+
+        /* 拖放上傳區域樣式 */
+        #dropZone {
+            border: 2px dashed #FFD700;
+            transition: all 0.3s ease;
+        }
+
+        #dropZone.drag-over {
+            background-color: rgba(255, 215, 0, 0.1);
+            border-color: #FFA500;
+        }
+
+        /* 複製按鈕動畫 */
+        .copy-btn {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .copy-btn:hover {
+            background-color: rgba(255, 215, 0, 0.2);
+        }
+
+        /* 標籤樣式 */
+        .tag {
+            background-color: rgba(255, 215, 0, 0.15);
+            color: #FFD700;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            display: inline-block;
+            margin: 0.25rem;
+        }
+
+        /* 載入動畫 */
+        .spinner {
+            border: 3px solid rgba(255, 215, 0, 0.3);
+            border-top: 3px solid #FFD700;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* 多選模式樣式 */
+        .selection-mode .masonry-item {
+            position: relative;
+        }
+
+        .masonry-item .checkbox-overlay {
+            display: none;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+        }
+
+        .selection-mode .checkbox-overlay {
+            display: block;
+        }
+
+        .checkbox-overlay input[type="checkbox"] {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            accent-color: #FFD700;
+        }
+
+        .selection-mode .masonry-item.selected {
+            outline: 3px solid #FFD700;
+            outline-offset: -3px;
+        }
+
+        /* 提示詞摺疊樣式 */
+        .prompt-text {
+            position: relative;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .prompt-text.collapsed {
+            max-height: 4.5em;
+            /* 約 3 行 */
+            line-height: 1.5em;
+        }
+
+        .prompt-text.expanded {
+            max-height: none;
+        }
+
+        .expand-btn {
+            color: #FFD700;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 4px;
+            display: inline-block;
+            text-decoration: underline;
+            user-select: none;
+        }
+
+        .expand-btn:hover {
+            color: #FFA500;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen">
+    <!-- 標題列 -->
+    <header class="py-8 px-6 border-b border-gray-800">
+        <div class="max-w-7xl mx-auto">
+            <h1 class="text-5xl font-bold text-center">
+                🍌 <span style="color: #FFD700;">Banana</span>DB
+            </h1>
+            <p class="text-center text-gray-400 mt-2">本地 AI 圖片資料庫與提示詞逆向工程系統</p>
+        </div>
+    </header>
+
+    <!-- 上傳區域 -->
+    <section class="py-8 px-6">
+        <div class="max-w-7xl mx-auto">
+            <div id="dropZone" class="rounded-lg p-12 text-center">
+                <input type="file" id="fileInput" accept="image/*" class="hidden">
+                <div id="uploadContent">
+                    <svg class="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                        </path>
+                    </svg>
+                    <p class="mt-4 text-xl text-gray-300">拖放圖片至此處上傳</p>
+                    <p class="mt-2 text-sm text-gray-500">或</p>
+                    <button onclick="document.getElementById('fileInput').click()"
+                        class="mt-4 px-6 py-2 bg-yellow-500 text-black rounded-lg font-semibold hover:bg-yellow-400 transition">
+                        選擇檔案
+                    </button>
+                </div>
+                <div id="uploadingContent" class="hidden">
+                    <div class="spinner mx-auto"></div>
+                    <p class="mt-4 text-xl text-yellow-500">正在分析圖片...</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 圖庫區域 -->
+    <section class="py-8 px-6">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex justify-between items-center mb-6 flex-wrap gap-3">
+                <h2 class="text-3xl font-bold" style="color: #FFD700;">圖片圖庫</h2>
+                <div class="flex gap-3">
+                    <button id="toggleSelectionBtn" onclick="toggleSelectionMode()"
+                        class="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition">
+                        ☑️ 多選模式
+                    </button>
+                    <button id="deleteSelectedBtn" onclick="deleteSelected()"
+                        class="hidden px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 transition">
+                        🗑️ 刪除選取 (<span id="selectedCount">0</span>)
+                    </button>
+                    <button onclick="loadGallery()"
+                        class="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition">
+                        🔄 重新整理
+                    </button>
+                </div>
+            </div>
+
+            <!-- 載入中 -->
+            <div id="loadingIndicator" class="text-center py-12">
+                <div class="spinner mx-auto"></div>
+                <p class="mt-4 text-gray-400">載入中...</p>
+            </div>
+
+            <!-- 空狀態 -->
+            <div id="emptyState" class="hidden text-center py-12">
+                <p class="text-2xl text-gray-500">尚未有圖片</p>
+                <p class="text-gray-600 mt-2">上傳圖片或使用 Chrome 擴充功能收集圖片</p>
+            </div>
+
+            <!-- 瀑布流圖庫 -->
+            <div id="gallery" class="masonry-grid hidden"></div>
+        </div>
+    </section>
+
+    <!-- 通知提示 -->
+    <div id="toast" class="hidden fixed bottom-6 right-6 px-6 py-3 rounded-lg shadow-lg transition-all"></div>
+
+    <script>
+        // ========== 全域變數 ==========
+        const API_BASE = window.location.origin;
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const gallery = document.getElementById('gallery');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const emptyState = document.getElementById('emptyState');
+        const uploadContent = document.getElementById('uploadContent');
+        const uploadingContent = document.getElementById('uploadingContent');
+
+        // 多選模式狀態
+        let isSelectionMode = false;
+        let selectedImages = new Set();
+
+        // ========== 拖放上傳事件 ==========
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadImage(files[0]);
+            }
+        });
+
+        // 檔案選擇上傳
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                uploadImage(e.target.files[0]);
+            }
+        });
+
+        // ========== 上傳圖片函式 ==========
+        async function uploadImage(file) {
+            if (!file.type.startsWith('image/')) {
+                showToast('只能上傳圖片檔案', 'error');
+                return;
+            }
+
+            // 顯示載入動畫
+            uploadContent.classList.add('hidden');
+            uploadingContent.classList.remove('hidden');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`${API_BASE}/api/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`上傳失敗: HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('✅ 圖片上傳成功', 'success');
+                    // 重新載入圖庫
+                    setTimeout(() => loadGallery(), 1000);
+                } else {
+                    throw new Error(result.message || '上傳失敗');
+                }
+
+            } catch (error) {
+                console.error('上傳錯誤:', error);
+                showToast('❌ ' + error.message, 'error');
+            } finally {
+                // 恢復上傳區域
+                uploadContent.classList.remove('hidden');
+                uploadingContent.classList.add('hidden');
+                fileInput.value = '';
+            }
+        }
+
+        // ========== 載入圖庫函式 ==========
+        async function loadGallery() {
+            loadingIndicator.classList.remove('hidden');
+            gallery.classList.add('hidden');
+            emptyState.classList.add('hidden');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/images`);
+
+                if (!response.ok) {
+                    throw new Error(`載入失敗: HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success && result.data.length > 0) {
+                    renderGallery(result.data);
+                    gallery.classList.remove('hidden');
+                } else {
+                    emptyState.classList.remove('hidden');
+                }
+
+            } catch (error) {
+                console.error('載入錯誤:', error);
+                showToast('❌ 圖庫載入失敗', 'error');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+
+        // ========== 渲染圖庫函式 ==========
+        function renderGallery(images) {
+            gallery.innerHTML = '';
+
+            images.forEach(image => {
+                const card = createImageCard(image);
+                gallery.appendChild(card);
+            });
+        }
+
+        // ========== 建立圖片卡片函式 ==========
+        function createImageCard(image) {
+            const div = document.createElement('div');
+            div.className = 'masonry-item bg-gray-900 rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition';
+            div.dataset.imageId = image.id;
+
+            const imageUrl = `${API_BASE}/uploads/${image.filename}`;
+
+            div.innerHTML = `
+                <div class="checkbox-overlay">
+                    <input type="checkbox" onchange="toggleImageSelection(${image.id})" ${selectedImages.has(image.id) ? 'checked' : ''}>
+                </div>
+                <img src="${imageUrl}" alt="Image ${image.id}" class="w-full h-auto">
+                <div class="p-4">
+                    <!-- 英文提示詞 -->
+                    <div class="mb-3">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs text-gray-500 font-semibold">ENGLISH PROMPT</span>
+                            <button onclick="copyToClipboard('${escapeHtml(image.positive_prompt)}', 'en')" 
+                                    class="copy-btn text-xs px-2 py-1 rounded bg-gray-800 hover:bg-yellow-900">
+                                📋 複製
+                            </button>
+                        </div>
+                        <div id="prompt-en-${image.id}" class="prompt-text collapsed">
+                            <p class="text-sm text-gray-300 leading-relaxed">${escapeHtml(image.positive_prompt)}</p>
+                        </div>
+                        ${needsExpand(image.positive_prompt) ? `<span class="expand-btn" onclick="togglePrompt('prompt-en-${image.id}', this)">... 展開</span>` : ''}
+                    </div>
+                    
+                    <!-- 中文提示詞 -->
+                    ${image.positive_prompt_zh ? `
+                    <div class="mb-3">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs text-yellow-500 font-semibold">繁體中文提示詞</span>
+                            <button onclick="copyToClipboard('${escapeHtml(image.positive_prompt_zh)}', 'zh')" 
+                                    class="copy-btn text-xs px-2 py-1 rounded bg-gray-800 hover:bg-yellow-900">
+                                📋 複製
+                            </button>
+                        </div>
+                        <div id="prompt-zh-${image.id}" class="prompt-text collapsed">
+                            <p class="text-sm text-yellow-100 leading-relaxed">${escapeHtml(image.positive_prompt_zh)}</p>
+                        </div>
+                        ${needsExpand(image.positive_prompt_zh) ? `<span class="expand-btn" onclick="togglePrompt('prompt-zh-${image.id}', this)">... 展開</span>` : ''}
+                    </div>
+                    ` : ''}
+                    
+                    <!-- 負面提示詞 -->
+                    ${image.negative_prompt ? `
+                    <div class="mb-3">
+                        <span class="text-xs text-gray-500 font-semibold">NEGATIVE PROMPT</span>
+                        <div id="prompt-neg-${image.id}" class="prompt-text collapsed">
+                            <p class="text-xs text-gray-500 mt-1">${escapeHtml(image.negative_prompt)}</p>
+                        </div>
+                        ${needsExpand(image.negative_prompt) ? `<span class="expand-btn" onclick="togglePrompt('prompt-neg-${image.id}', this)">... 展開</span>` : ''}
+                    </div>
+                    ` : ''}
+                    
+                    <!-- 標籤 -->
+                    ${image.tags && image.tags.length > 0 ? `
+                    <div class="mb-3">
+                        ${image.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+                    </div>
+                    ` : ''}
+                    
+                    <!-- 來源 URL -->
+                    ${image.source_url ? `
+                    <div class="text-xs text-gray-600">
+                        <a href="${escapeHtml(image.source_url)}" target="_blank" class="hover:text-yellow-500">
+                            🔗 來源連結
+                        </a>
+                    </div>
+                    ` : ''}
+                    
+                    <!-- 時間戳記與刪除按鈕 -->
+                    <div class="flex justify-between items-center mt-2">
+                        <div class="text-xs text-gray-700">
+                            ${new Date(image.created_at).toLocaleString('zh-TW')}
+                        </div>
+                        <button onclick="deleteSingleImage(${image.id})" class="text-xs px-3 py-1 bg-red-600 rounded hover:bg-red-700 transition">
+                            🗑️ 刪除
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            if (selectedImages.has(image.id)) {
+                div.classList.add('selected');
+            }
+
+            return div;
+        }
+
+        // ========== 提示詞展開/收合函式 ==========
+        function needsExpand(text) {
+            if (!text) return false;
+            // 簡單判斷：超過 150 字元或有多行
+            return text.length > 150 || text.split('\n').length > 3;
+        }
+
+        function togglePrompt(elementId, button) {
+            const element = document.getElementById(elementId);
+            const isCollapsed = element.classList.contains('collapsed');
+
+            if (isCollapsed) {
+                element.classList.remove('collapsed');
+                element.classList.add('expanded');
+                button.textContent = '收合';
+            } else {
+                element.classList.add('collapsed');
+                element.classList.remove('expanded');
+                button.textContent = '... 展開';
+            }
+        }
+
+        // ========== 複製到剪貼簿函式 ==========
+        function copyToClipboard(text, lang) {
+            navigator.clipboard.writeText(text).then(() => {
+                const langText = lang === 'zh' ? '中文' : '英文';
+                showToast(`✅ 已複製${langText}提示詞`, 'success');
+            }).catch(err => {
+                console.error('複製失敗:', err);
+                showToast('❌ 複製失敗', 'error');
+            });
+        }
+
+        // ========== HTML 跳脫函式 ==========
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML.replace(/'/g, '&apos;');
+        }
+
+        // ========== 顯示提示訊息函式 ==========
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `fixed bottom-6 right-6 px-6 py-3 rounded-lg shadow-lg transition-all ${type === 'success' ? 'bg-green-600' :
+                type === 'error' ? 'bg-red-600' :
+                    'bg-gray-700'
+                }`;
+            toast.classList.remove('hidden');
+
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 3000);
+        }
+
+        // ========== 多選與刪除功能 ==========
+        function toggleSelectionMode() {
+            isSelectionMode = !isSelectionMode;
+            const btn = document.getElementById('toggleSelectionBtn');
+            const deleteBtn = document.getElementById('deleteSelectedBtn');
+
+            if (isSelectionMode) {
+                gallery.classList.add('selection-mode');
+                btn.textContent = '✅ 取消多選';
+                btn.classList.add('bg-yellow-600');
+                deleteBtn.classList.remove('hidden');
+            } else {
+                gallery.classList.remove('selection-mode');
+                btn.textContent = '☑️ 多選模式';
+                btn.classList.remove('bg-yellow-600');
+                deleteBtn.classList.add('hidden');
+                selectedImages.clear();
+                updateSelectedCount();
+            }
+        }
+
+        function toggleImageSelection(imageId) {
+            const card = document.querySelector(`[data-image-id="${imageId}"]`);
+
+            if (selectedImages.has(imageId)) {
+                selectedImages.delete(imageId);
+                card.classList.remove('selected');
+            } else {
+                selectedImages.add(imageId);
+                card.classList.add('selected');
+            }
+
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            document.getElementById('selectedCount').textContent = selectedImages.size;
+        }
+
+        async function deleteSingleImage(imageId) {
+            if (!confirm('確定要刪除此圖片嗎？')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/images/${imageId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`刪除失敗: HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('✅ 圖片已刪除', 'success');
+                    loadGallery();
+                } else {
+                    throw new Error(result.message || '刪除失敗');
+                }
+            } catch (error) {
+                console.error('刪除錯誤:', error);
+                showToast('❌ ' + error.message, 'error');
+            }
+        }
+
+        async function deleteSelected() {
+            if (selectedImages.size === 0) {
+                showToast('請先選擇要刪除的圖片', 'error');
+                return;
+            }
+
+            if (!confirm(`確定要刪除選取的 ${selectedImages.size} 張圖片嗎？`)) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/images/delete_batch`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image_ids: Array.from(selectedImages)
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`批次刪除失敗: HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(`✅ 成功刪除 ${result.data.deleted_count} 張圖片`, 'success');
+                    selectedImages.clear();
+                    updateSelectedCount();
+                    loadGallery();
+                } else {
+                    throw new Error(result.message || '批次刪除失敗');
+                }
+            } catch (error) {
+                console.error('批次刪除錯誤:', error);
+                showToast('❌ ' + error.message, 'error');
+            }
+        }
+
+        // ========== 頁面載入時自動載入圖庫 ==========
+        window.addEventListener('load', () => {
+            loadGallery();
+        });
+    </script>
+</body>
+
+</html>
